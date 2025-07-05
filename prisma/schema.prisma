@@ -1,0 +1,129 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  password      String?
+  emailVerified DateTime?
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  googleId      String?   @unique
+  githubId      String?   @unique
+  provider      String?
+
+  verificationToken String?  @unique
+  resetToken       String?   @unique
+  resetTokenExpiry DateTime?
+  sharedWithMe   SharedSimulation[] @relation("SharedToUser") // This matches the relation name in SharedSimulation
+  simulations      Simulation[] @relation("AuthorSimulations")
+  favorites        Simulation[]  @relation("UserFavorites")
+  comments         Comment[]
+  notificationSettings NotificationSettings?
+}
+
+
+model NotificationSettings {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id])
+
+  // Notifications par email
+  emailSimulationShared Boolean @default(true)
+  emailNewComment       Boolean @default(true)
+
+  // Notifications push
+  pushNotificationLevel String  @default("all") // 'all', 'important', 'none'
+
+  @@index([userId])
+}
+
+
+enum SimulationType {
+  CHANNELS
+  BLOCKING
+  TRAFFIC
+  POPULATION
+}
+
+model Simulation {
+  id               String            @id @default(cuid())
+  user             User              @relation("AuthorSimulations", fields: [userId], references: [id])
+  userId           String
+  favoritedBy      User[]            @relation("UserFavorites")
+
+  zoneLat          Float?
+  zoneLon          Float?
+  zoneDisplayName  String?
+
+  type             SimulationType
+  formData         Json              // Données du formulaire
+  result           Float?            // Résultat principal
+  chartData        Json?             // Données pour les graphiques
+  aiAnalysis       String?           // Analyse IA
+  
+  sharedWith       SharedSimulation[]
+  comments         Comment[]
+
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  @@index([userId])
+}
+
+model SharedSimulation {
+  id             String       @id @default(cuid())
+  simulation     Simulation   @relation(fields: [simulationId], references: [id])
+  simulationId   String
+
+  toUser         User         @relation("SharedToUser", fields: [toUserId], references: [id])
+  toUserId       String
+
+  canEdit        Boolean      @default(false)
+  canShare       Boolean      @default(false)
+
+  createdAt      DateTime     @default(now())
+
+  @@unique([simulationId, toUserId])
+  @@index([simulationId])
+  @@index([toUserId])
+}
+
+model Comment {
+  id             String       @id @default(cuid())
+  content        String
+  user           User         @relation(fields: [userId], references: [id])
+  userId         String
+  simulation     Simulation   @relation(fields: [simulationId], references: [id])
+  simulationId   String
+  parentId       String?      // Pour les réponses aux commentaires
+  createdAt      DateTime     @default(now())
+
+  @@index([simulationId])
+  @@index([userId])
+}
+
+
+
+enum SimulationStatus {
+  DRAFT
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+  ARCHIVED
+}
