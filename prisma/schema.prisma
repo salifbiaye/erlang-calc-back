@@ -26,6 +26,7 @@ model User {
   googleId      String?   @unique
   githubId      String?   @unique
   provider      String?
+        id,
 
   verificationToken String?  @unique
   resetToken       String?   @unique

@@ -1,4 +1,4 @@
-import { Controller, Post, Body,Get,Query, UseGuards, Request, BadRequestException, Delete, Param, ParseUUIDPipe, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, Post, Body,Get,Query, UseGuards, Request, BadRequestException, Delete, Param, ParseUUIDPipe, HttpCode, HttpStatus, NotFoundException, Patch } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PrismaService } from '../prisma/prisma.service';
 import { SimulationType } from '@prisma/client';
@@ -152,6 +152,105 @@ export class SimulationController {
       }
     };
   }
+  @Get(':id')
+  @UseGuards(JwtAuthGuard)
+  async getSimulationById(
+    @Param('id') id: string,
+    @Request() req
+  ) {
+    const userId = req.user.userId;
+
+    const simulation = await this.prisma.simulation.findFirst({
+      where: {
+        OR: [
+          { id, userId }, // Soit c'est la simulation de l'utilisateur
+          { 
+            id,
+            sharedWith: { 
+              some: { toUserId: userId } 
+            } 
+          } // Soit elle lui a été partagée
+        ]
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true
+          }
+        },
+        favoritedBy: {
+          where: { id: userId },
+          select: { id: true }
+        }
+      }
+    });
+
+    if (!simulation) {
+      throw new NotFoundException('Simulation non trouvée ou accès non autorisé');
+    }
+
+    return {
+      ...simulation,
+      isFavorite: simulation.favoritedBy.length > 0
+    };
+  }
+
+// Mettre à jour le statut de favori
+  @Patch(':id')
+  @UseGuards(JwtAuthGuard)
+  async toggleFavorite(
+    @Param('id') id: string,
+    @Query('favorite') favorite: string,
+    @Request() req
+  ) {
+    const userId = req.user.userId;
+    const isFavorite = favorite === 'true';
+
+    // Vérifier que la simulation existe et est accessible
+    const simulation = await this.prisma.simulation.findFirst({
+      where: {
+        id,
+        OR: [
+          { userId }, // Soit c'est la simulation de l'utilisateur
+          { 
+            sharedWith: { 
+              some: { toUserId: userId } 
+            } 
+          } // Soit elle lui a été partagée
+        ]
+      }
+    });
+
+    if (!simulation) {
+      throw new NotFoundException('Simulation non trouvée ou accès non autorisé');
+    }
+
+    if (isFavorite) {
+      // Ajouter aux favoris
+      await this.prisma.simulation.update({
+        where: { id },
+        data: {
+          favoritedBy: {
+            connect: { id: userId }
+          }
+        }
+      });
+    } else {
+      // Retirer des favoris
+      await this.prisma.simulation.update({
+        where: { id },
+        data: {
+          favoritedBy: {
+            disconnect: { id: userId }
+          }
+        }
+      });
+    }
+
+    return { success: true };
+  }
 
   @Post()
   @UseGuards(JwtAuthGuard)
@@ -191,26 +290,24 @@ export class SimulationController {
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.NO_CONTENT)
   async deleteSimulation(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Request() req: UserRequest
+    @Param('id') id: string,  // Retirer ParseUUIDPipe
+    @Request() req
   ) {
     const userId = req.user.userId;
-
-    // Vérifier que la simulation appartient à l'utilisateur
-    const simulation = await this.prisma.simulation.findUnique({
-      where: { id },
-      select: { userId: true }
+  
+    // Vérifier que la simulation existe et appartient à l'utilisateur
+    const simulation = await this.prisma.simulation.findFirst({
+      where: { 
+        id,
+        userId  // Vérifie l'appartenance en une seule requête
+      }
     });
-
+  
     if (!simulation) {
-      throw new BadRequestException('Simulation non trouvée');
+      throw new NotFoundException('Simulation non trouvée ou accès non autorisé');
     }
-
-    if (simulation.userId !== userId) {
-      throw new BadRequestException('Non autorisé');
-    }
-
-    // Supprimer la simulation
+  
+    // Si on arrive ici, c'est que la simulation existe et appartient à l'utilisateur
     await this.prisma.simulation.delete({
       where: { id }
     });
