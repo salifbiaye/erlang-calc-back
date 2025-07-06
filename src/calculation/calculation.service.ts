@@ -1,7 +1,7 @@
 // src/calculation/calculation.service.ts
 import { Injectable, Inject, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import axios from 'axios';
+
 import { AiService } from '../ai/ai.service';
 
 @Injectable()
