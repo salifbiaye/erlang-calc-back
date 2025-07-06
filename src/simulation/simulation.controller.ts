@@ -1,7 +1,7 @@
 import { Controller, Post, Body, Get, Query, UseGuards, Request, Delete, Param, ParseUUIDPipe, HttpCode, HttpStatus, NotFoundException, BadRequestException, Patch } from '@nestjs/common';
 import { SimulationService } from './simulation.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { PaginationParams } from 'src/common/dto/pagination.dto';
+import { PaginationParams } from '../common/dto/pagination.dto';
 import { SimulationType } from '@prisma/client';
 import { CreateSimulationDto } from './dto/create-simulation.dto';
 type UserRequest = Request & { user: { userId: string } };
