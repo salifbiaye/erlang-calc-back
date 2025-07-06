@@ -7,7 +7,7 @@ export class EmailService {
   private resend: Resend;
 
   constructor(private configService: ConfigService) {
-    const resendApiKey = this.configService.get('RESEND_API_KEY');
+    const resendApiKey = process.env.RESEND_API_KEY;
     console.log('Initialisation de Resend avec la clé API:', resendApiKey ? 'Présente' : 'Manquante');
     this.resend = new Resend(resendApiKey);
   }
@@ -37,7 +37,7 @@ export class EmailService {
   }
 
   async sendVerificationEmail(email: string, token: string) {
-    const verificationUrl = `${this.configService.get('FRONTEND_URL')}/verify-email?token=${token}`;
+    const verificationUrl = `${process.env.FRONTEND_URL}/verify-email?token=${token}`;
     
     return this.sendEmail(
       email,
