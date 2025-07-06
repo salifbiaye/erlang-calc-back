@@ -91,12 +91,7 @@ export class SimulationController {
   ) {
     const userId = req.user.userId;
     
-    // Valider le type de simulation
-    const simulationType = this.mapToSimulationType(createSimulationDto.type);
-    if (!simulationType) {
-      throw new BadRequestException('Type de simulation invalide');
-    }
-
+    
     // Créer la simulation avec les informations de zone
     const simulation = await this.simulationService.createSimulation(
       createSimulationDto,

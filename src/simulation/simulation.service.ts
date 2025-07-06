@@ -424,6 +424,6 @@ export class SimulationService {
 
   private mapToSimulationType(type: string): SimulationType | null {
     const validTypes = ['BLOCKING', 'CHANNELS', 'POPULATION', 'TRAFFIC'] as const;
-    return validTypes.includes(type as any) ? type as SimulationType : null;
+    return validTypes.includes(type.toUpperCase() as any) ? type.toUpperCase() as SimulationType : null;
   }
 }

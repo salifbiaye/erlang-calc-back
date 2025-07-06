@@ -1,7 +1,11 @@
-import { IsString, IsNumber, IsOptional, IsObject, IsIn } from 'class-validator';
+import { IsString, IsNumber, IsOptional, IsObject, IsIn, IsNotEmpty } from 'class-validator';
 
 export class CreateSimulationDto {
-  @IsIn(['channels', 'blocking', 'traffic', 'population'])
+  @IsString()
+  @IsNotEmpty()
+  @IsIn(['channels', 'blocking', 'traffic', 'population'], {
+    message: 'type must be one of the following values: channels, blocking, traffic, population'
+  })
   type: string;
 
   @IsObject()
