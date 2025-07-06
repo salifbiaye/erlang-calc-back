@@ -1,9 +1,14 @@
 import { Injectable } from '@nestjs/common';
+import { PrismaService } from '../prisma/prisma.service';
 import { CalculationService } from '../calculation/calculation.service';
+import { SimulationType } from '@prisma/client';
 
 @Injectable()
 export class SimulationService {
-  constructor(private calculationService: CalculationService) {}
+  constructor(
+    private calculationService: CalculationService,
+    private prisma: PrismaService
+  ) {}
 
   async generateSimulation(calculationType: string, params: any) {
     switch (calculationType) {
@@ -188,5 +193,237 @@ export class SimulationService {
       simulations,
       aiAnalysis: result.aiAnalysis
     };
+  }
+
+  async getSimulationStats(userId: string) {
+    const stats = await this.prisma.simulation.groupBy({
+      by: ['type'],
+      where: {
+        userId: userId
+      },
+      _count: {
+        type: true
+      },
+      orderBy: {
+        _count: {
+          type: 'desc'
+        }
+      }
+    });
+
+    const allTypes = ['BLOCKING', 'CHANNELS', 'POPULATION', 'TRAFFIC'];
+    return allTypes.map(type => {
+      const stat = stats.find(s => s.type === type);
+      return {
+        type,
+        count: stat?._count?.type || 0
+      };
+    });
+  }
+
+  async getSimulations(userId: string, page: number, limit: number, favoritesOnly: boolean) {
+    const where = {
+      userId,
+      ...(favoritesOnly && {
+        favoritedBy: {
+          some: { id: userId }
+        }
+      })
+    };
+
+    const [simulations, total] = await Promise.all([
+      this.prisma.simulation.findMany({
+        where,
+        include: {
+          favoritedBy: {
+            where: { id: userId },
+            select: { id: true }
+          }
+        },
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      this.prisma.simulation.count({ where })
+    ]);
+
+    return {
+      data: simulations.map(sim => ({
+        ...sim,
+        isFavorite: sim.favoritedBy.length > 0
+      })),
+      pagination: {
+        total,
+        totalPages: Math.ceil(total / limit),
+        currentPage: page,
+        limit
+      }
+    };
+  }
+
+  async getSharedSimulations(userId: string, page: number, limit: number, favoritesOnly: boolean) {
+    const where: any = {
+      sharedWith: {
+        some: { toUserId: userId }
+      },
+      ...(favoritesOnly && {
+        favoritedBy: {
+          some: { id: userId }
+        }
+      })
+    };
+
+    const [simulations, total] = await Promise.all([
+      this.prisma.simulation.findMany({
+        where,
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true
+            }
+          },
+          favoritedBy: {
+            where: { id: userId },
+            select: { id: true }
+          },
+          sharedWith: {
+            where: { toUserId: userId },
+            select: { canEdit: true, canShare: true }
+          }
+        },
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      this.prisma.simulation.count({ where })
+    ]);
+
+    return {
+      data: simulations.map(sim => ({
+        ...sim,
+        isFavorite: sim.favoritedBy.length > 0,
+        permissions: {
+          canEdit: sim.sharedWith[0]?.canEdit || false,
+          canShare: sim.sharedWith[0]?.canShare || false
+        }
+      })),
+      pagination: {
+        total,
+        totalPages: Math.ceil(total / limit),
+        currentPage: page,
+        limit
+      }
+    };
+  }
+
+  async getSimulationById(id: string, userId: string) {
+    const simulation = await this.prisma.simulation.findFirst({
+      where: {
+        OR: [
+          { id, userId },
+          { 
+            id,
+            sharedWith: { 
+              some: { toUserId: userId } 
+            } 
+          }
+        ]
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true
+          }
+        },
+        favoritedBy: {
+          where: { id: userId },
+          select: { id: true }
+        }
+      }
+    });
+
+    if (!simulation) {
+      throw new Error('Simulation non trouvée ou accès non autorisé');
+    }
+
+    return {
+      ...simulation,
+      isFavorite: simulation.favoritedBy.length > 0
+    };
+  }
+
+  async toggleFavorite(id: string, userId: string, isFavorite: boolean) {
+    const simulation = await this.prisma.simulation.findFirst({
+      where: {
+        id,
+        OR: [
+          { userId },
+          { 
+            sharedWith: { 
+              some: { toUserId: userId } 
+            } 
+          }
+        ]
+      }
+    });
+
+    if (!simulation) {
+      throw new Error('Simulation non trouvée ou accès non autorisé');
+    }
+
+    await this.prisma.simulation.update({
+      where: { id },
+      data: {
+        favoritedBy: {
+          [isFavorite ? 'connect' : 'disconnect']: { id: userId }
+        }
+      }
+    });
+
+    return { success: true };
+  }
+
+  async deleteSimulation(id: string, userId: string) {
+    const simulation = await this.prisma.simulation.findFirst({
+      where: { id, userId }
+    });
+
+    if (!simulation) {
+      throw new Error('Simulation non trouvée ou accès non autorisé');
+    }
+
+    await this.prisma.simulation.delete({ where: { id } });
+    return { success: true };
+  }
+
+  async createSimulation(createSimulationDto: any, userId: string) {
+    const simulationType = this.mapToSimulationType(createSimulationDto.type);
+    if (!simulationType) {
+      throw new Error('Type de simulation non valide');
+    }
+
+    return this.prisma.simulation.create({
+      data: {
+        user: { connect: { id: userId } },
+        type: simulationType,
+        formData: createSimulationDto.formData || {},
+        result: createSimulationDto.result,
+        chartData: createSimulationDto.chartData || null,
+        aiAnalysis: createSimulationDto.aiAnalysis || null,
+        zoneLat: createSimulationDto.zone?.lat || null,
+        zoneLon: createSimulationDto.zone?.lon || null,
+        zoneDisplayName: createSimulationDto.zone?.display_name || 
+          (createSimulationDto.zone ? `Zone (${createSimulationDto.zone.lat}, ${createSimulationDto.zone.lon})` : null),
+      },
+    });
+  }
+
+  private mapToSimulationType(type: string): SimulationType | null {
+    const validTypes = ['BLOCKING', 'CHANNELS', 'POPULATION', 'TRAFFIC'] as const;
+    return validTypes.includes(type as any) ? type as SimulationType : null;
   }
 }

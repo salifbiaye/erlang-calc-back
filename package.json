@@ -22,6 +22,7 @@
   "dependencies": {
     "@apollo/server": "^4.12.2",
     "@better-auth/cli": "^1.2.12",
+    "@google/generative-ai": "^0.24.1",
     "@nestjs/apollo": "^12.0.11",
     "@nestjs/common": "^10.0.0",
     "@nestjs/config": "^4.0.2",
