@@ -13,7 +13,7 @@ import { AiService } from '../ai/ai.service';
     {
       provide: 'GEMINI_API_KEY',
       useFactory: (configService: ConfigService) => 
-        configService.get<string>('GEMINI_API_KEY'),
+        process.env.GEMINI_API_KEY,
       inject: [ConfigService],
     },
     AiService

@@ -8,7 +8,7 @@ import { AiService } from './ai.service';
     {
       provide: 'GEMINI_API_KEY',
       useFactory: (configService: ConfigService) => {
-        return configService.get<string>('GEMINI_API_KEY');
+        return process.env.GEMINI_API_KEY;
       },
       inject: [ConfigService],
     },
